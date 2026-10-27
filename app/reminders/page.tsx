@@ -2,60 +2,84 @@
 
 import { useEffect, useState } from 'react';
 import { store } from '@/lib/store';
-import { Application, Interview } from '@/lib/types';
+import { Reminder } from '@/lib/types';
 import Sidebar from '@/components/Sidebar';
-import { AlertCircle, Calendar, Clock } from 'lucide-react';
+import Modal from '@/components/Modal';
+import ReminderForm from '@/components/ReminderForm';
+import EmptyState from '@/components/EmptyState';
+import Card from '@/components/Card';
+import Badge from '@/components/Badge';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { AlertCircle, Calendar, Clock, Plus, CheckCircle, Edit2, Trash2, Bell } from 'lucide-react';
 
 export default function RemindersPage() {
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    setApplications(store.getAllApplications());
-    setInterviews(store.getAllInterviews());
+    loadData();
   }, []);
+
+  const loadData = () => {
+    setReminders(store.getAllReminders());
+  };
+
+  const handleFormSubmit = (data: Omit<Reminder, 'id' | 'createdAt' | 'updatedAt'>) => {
+    if (editingReminder) {
+      store.updateReminder(editingReminder.id, data);
+    } else {
+      store.addReminder({
+        ...data,
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as Reminder);
+    }
+    loadData();
+    setShowModal(false);
+    setEditingReminder(null);
+  };
+
+  const handleDelete = () => {
+    if (deleteId) {
+      store.deleteReminder(deleteId);
+      loadData();
+      setDeleteId(null);
+    }
+  };
+
+  const handleToggleComplete = (reminder: Reminder) => {
+    store.updateReminder(reminder.id, { completed: !reminder.completed });
+    loadData();
+  };
+
+  const handleEdit = (reminder: Reminder) => {
+    setEditingReminder(reminder);
+    setShowModal(true);
+  };
+
+  const handleAddNew = () => {
+    setEditingReminder(null);
+    setShowModal(true);
+  };
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const upcomingInterviews = interviews
-    .filter(interview => {
-      const interviewDate = new Date(interview.date);
-      return interviewDate >= today;
-    })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 10);
+  const activeReminders = reminders.filter(r => !r.completed);
+  const completedReminders = reminders.filter(r => r.completed);
 
-  const upcomingDeadlines = applications
-    .filter(app => {
-      if (!app.deadline) return false;
-      const deadlineDate = new Date(app.deadline);
-      return deadlineDate >= today;
-    })
-    .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())
-    .slice(0, 10);
+  const urgentReminders = activeReminders.filter(r => {
+    const dueDate = new Date(r.dueDate);
+    return dueDate <= today || r.priority === 'urgent';
+  });
 
-  const followUps = applications
-    .filter(app => {
-      if (!app.followUpDate) return false;
-      const followUpDate = new Date(app.followUpDate);
-      return followUpDate >= today;
-    })
-    .sort((a, b) => new Date(a.followUpDate!).getTime() - new Date(b.followUpDate!).getTime())
-    .slice(0, 10);
-
-  const overdueDeadlines = applications
-    .filter(app => {
-      if (!app.deadline) return false;
-      const deadlineDate = new Date(app.deadline);
-      return deadlineDate < today && app.status === 'Wishlist';
-    })
-    .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime());
-
-  const getApplicationName = (appId: string) => {
-    const app = applications.find(a => a.id === appId);
-    return app ? `${app.companyName} - ${app.jobRole}` : 'Unknown';
-  };
+  const upcomingReminders = activeReminders.filter(r => {
+    const dueDate = new Date(r.dueDate);
+    return dueDate > today && r.priority !== 'urgent';
+  }).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
   const getDaysUntil = (dateString: string) => {
     const targetDate = new Date(dateString);
@@ -68,160 +92,248 @@ export default function RemindersPage() {
     return `In ${diffDays} days`;
   };
 
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'urgent': return 'danger';
+      case 'high': return 'warning';
+      case 'medium': return 'info';
+      case 'low': return 'default';
+      default: return 'default';
+    }
+  };
+
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-gray-50">
       <Sidebar />
       
-      <main className="flex-1 bg-gray-50 p-8">
+      <main className="flex-1 p-8">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">Reminders & Deadlines</h1>
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Reminders</h1>
+              <p className="text-gray-600 mt-1">
+                {activeReminders.length} active reminder{activeReminders.length !== 1 ? 's' : ''}
+              </p>
+            </div>
+            <button
+              onClick={handleAddNew}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+            >
+              <Plus size={20} />
+              <span>Add Reminder</span>
+            </button>
+          </div>
 
-          {/* Overdue Items */}
-          {overdueDeadlines.length > 0 && (
+          {/* Urgent Reminders */}
+          {urgentReminders.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
               <div className="flex items-center mb-4">
                 <AlertCircle className="text-red-600 mr-2" size={24} />
-                <h2 className="text-xl font-semibold text-red-900">Overdue Deadlines</h2>
+                <h2 className="text-xl font-semibold text-red-900">Urgent & Overdue</h2>
               </div>
-              <div className="space-y-3">
-                {overdueDeadlines.map((app) => (
-                  <div key={app.id} className="bg-white rounded-lg p-4 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium text-gray-900">{app.companyName}</h3>
-                      <p className="text-sm text-gray-600">{app.jobRole}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {urgentReminders.map((reminder) => (
+                  <Card key={reminder.id} className="bg-white">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-gray-900">{reminder.title}</h3>
+                          <Badge variant={getPriorityColor(reminder.priority)} size="sm">
+                            {reminder.priority}
+                          </Badge>
+                        </div>
+                        {reminder.description && (
+                          <p className="text-sm text-gray-600 mb-2">{reminder.description}</p>
+                        )}
+                        {reminder.relatedTo && (
+                          <p className="text-xs text-gray-500">Related: {reminder.relatedTo}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-red-600 font-medium">{getDaysUntil(app.deadline!)}</span>
-                      <p className="text-sm text-gray-500">{new Date(app.deadline!).toLocaleDateString()}</p>
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                      <span className="text-sm text-red-600 font-medium">
+                        {getDaysUntil(reminder.dueDate)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleComplete(reminder)}
+                          className="text-green-600 hover:text-green-800 transition-colors"
+                          title="Mark as complete"
+                        >
+                          <CheckCircle size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleEdit(reminder)}
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(reminder.id)}
+                          className="text-red-600 hover:text-red-800 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Upcoming Interviews */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center mb-4">
-                <Calendar className="text-primary-600 mr-2" size={24} />
-                <h2 className="text-xl font-semibold text-gray-900">Upcoming Interviews</h2>
-              </div>
-              {upcomingInterviews.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No upcoming interviews</p>
-              ) : (
-                <div className="space-y-3">
-                  {upcomingInterviews.map((interview) => (
-                    <div key={interview.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900 mb-1">
-                            {getApplicationName(interview.applicationId)}
-                          </h3>
-                          <p className="text-sm text-gray-600 mb-2">{interview.type}</p>
-                          <div className="flex items-center text-sm text-gray-500">
-                            <Clock size={14} className="mr-1" />
-                            {new Date(interview.date).toLocaleDateString('en-US', { 
-                              month: 'short', 
-                              day: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })}
-                          </div>
+          {/* Upcoming Reminders */}
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+              <Bell className="mr-2 text-blue-600" size={24} />
+              Upcoming Reminders
+            </h2>
+            {upcomingReminders.length === 0 ? (
+              <EmptyState
+                icon={Calendar}
+                title="No upcoming reminders"
+                description="Create reminders to stay on top of your job applications"
+                actionLabel="Add Reminder"
+                onAction={handleAddNew}
+              />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {upcomingReminders.map((reminder) => (
+                  <Card key={reminder.id} className="hover:shadow-lg transition-shadow">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-semibold text-gray-900">{reminder.title}</h3>
+                          <Badge variant={getPriorityColor(reminder.priority)} size="sm">
+                            {reminder.priority}
+                          </Badge>
                         </div>
-                        <span className={`text-xs font-medium px-2 py-1 rounded ${
-                          getDaysUntil(interview.date) === 'Today' 
-                            ? 'bg-red-100 text-red-700' 
-                            : getDaysUntil(interview.date) === 'Tomorrow'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-blue-100 text-blue-700'
-                        }`}>
-                          {getDaysUntil(interview.date)}
-                        </span>
+                        {reminder.description && (
+                          <p className="text-sm text-gray-600 mb-2">{reminder.description}</p>
+                        )}
+                        <div className="flex items-center text-sm text-gray-500 mt-2">
+                          <Calendar size={14} className="mr-1" />
+                          {new Date(reminder.dueDate).toLocaleDateString()}
+                        </div>
+                        {reminder.relatedTo && (
+                          <p className="text-xs text-gray-500 mt-1">Related: {reminder.relatedTo}</p>
+                        )}
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Upcoming Deadlines */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center mb-4">
-                <AlertCircle className="text-orange-600 mr-2" size={24} />
-                <h2 className="text-xl font-semibold text-gray-900">Application Deadlines</h2>
-              </div>
-              {upcomingDeadlines.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No upcoming deadlines</p>
-              ) : (
-                <div className="space-y-3">
-                  {upcomingDeadlines.map((app) => (
-                    <div key={app.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900">{app.companyName}</h3>
-                          <p className="text-sm text-gray-600 mb-1">{app.jobRole}</p>
-                          <p className="text-xs text-gray-500">
-                            Deadline: {new Date(app.deadline!).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span className={`text-xs font-medium px-2 py-1 rounded ${
-                          getDaysUntil(app.deadline!) === 'Today' 
-                            ? 'bg-red-100 text-red-700' 
-                            : getDaysUntil(app.deadline!) === 'Tomorrow'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-green-100 text-green-700'
-                        }`}>
-                          {getDaysUntil(app.deadline!)}
-                        </span>
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                      <span className="text-sm text-gray-600 font-medium">
+                        {getDaysUntil(reminder.dueDate)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleToggleComplete(reminder)}
+                          className="text-green-600 hover:text-green-800 transition-colors"
+                          title="Mark as complete"
+                        >
+                          <CheckCircle size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleEdit(reminder)}
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                          title="Edit"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(reminder.id)}
+                          className="text-red-600 hover:text-red-800 transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Follow-ups */}
-            <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
-              <div className="flex items-center mb-4">
-                <Clock className="text-purple-600 mr-2" size={24} />
-                <h2 className="text-xl font-semibold text-gray-900">Follow-ups Needed</h2>
+                  </Card>
+                ))}
               </div>
-              {followUps.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">No follow-ups scheduled</p>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {followUps.map((app) => (
-                    <div key={app.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900">{app.companyName}</h3>
-                          <p className="text-sm text-gray-600 mb-1">{app.jobRole}</p>
-                          <p className="text-xs text-gray-500">
-                            Status: <span className="font-medium">{app.status}</span>
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            Follow-up: {new Date(app.followUpDate!).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <span className={`text-xs font-medium px-2 py-1 rounded ${
-                          getDaysUntil(app.followUpDate!) === 'Today' 
-                            ? 'bg-red-100 text-red-700' 
-                            : getDaysUntil(app.followUpDate!) === 'Tomorrow'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-purple-100 text-purple-700'
-                        }`}>
-                          {getDaysUntil(app.followUpDate!)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            )}
           </div>
+
+          {/* Completed Reminders */}
+          {completedReminders.length > 0 && (
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <CheckCircle className="mr-2 text-green-600" size={24} />
+                Completed ({completedReminders.length})
+              </h2>
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="divide-y divide-gray-200">
+                  {completedReminders.map((reminder) => (
+                    <div key={reminder.id} className="p-4 hover:bg-gray-50 transition-colors opacity-60">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-gray-900 line-through">{reminder.title}</h3>
+                            <Badge variant="success" size="sm">Completed</Badge>
+                          </div>
+                          {reminder.description && (
+                            <p className="text-sm text-gray-600 mt-1">{reminder.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 ml-4">
+                          <button
+                            onClick={() => handleToggleComplete(reminder)}
+                            className="text-gray-600 hover:text-gray-800 transition-colors"
+                            title="Mark as incomplete"
+                          >
+                            <CheckCircle size={18} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteId(reminder.id)}
+                            className="text-red-600 hover:text-red-800 transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
+
+      {/* Add/Edit Reminder Modal */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setEditingReminder(null);
+        }}
+        title={editingReminder ? 'Edit Reminder' : 'Create Reminder'}
+        size="lg"
+      >
+        <ReminderForm
+          reminder={editingReminder || undefined}
+          onSubmit={handleFormSubmit}
+          onCancel={() => {
+            setShowModal(false);
+            setEditingReminder(null);
+          }}
+        />
+      </Modal>
+
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deleteId}
+        title="Delete Reminder"
+        message="Are you sure you want to delete this reminder? This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+      />
     </div>
   );
 }
