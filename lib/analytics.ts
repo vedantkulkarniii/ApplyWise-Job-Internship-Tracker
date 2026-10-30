@@ -103,3 +103,33 @@ export function getUpcomingDeadlines(applications: Application[], days = 7) {
     })
     .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime());
 }
+
+// Calculate success rate (offers / total applications)
+export function calculateSuccessRate(applications: Application[]): number {
+  if (applications.length === 0) return 0;
+  
+  const offers = applications.filter(
+    app => app.status === 'offer' || app.status === 'accepted'
+  ).length;
+  
+  return Math.round((offers / applications.length) * 100);
+}
+
+// Calculate average response time
+export function getAverageResponseTime(applications: Application[]): number {
+  const applicationsWithResponse = applications.filter(
+    app => app.status !== 'applied' && app.appliedDate
+  );
+  
+  if (applicationsWithResponse.length === 0) return 0;
+  
+  const totalDays = applicationsWithResponse.reduce((sum, app) => {
+    const appliedDate = new Date(app.appliedDate);
+    const responseDate = new Date(app.updatedAt || app.createdAt);
+    const diffTime = Math.abs(responseDate.getTime() - appliedDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return sum + diffDays;
+  }, 0);
+  
+  return Math.round(totalDays / applicationsWithResponse.length);
+}
