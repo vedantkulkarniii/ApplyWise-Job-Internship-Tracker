@@ -1,9 +1,10 @@
-import { Application, Interview } from './types';
+import { Application, Interview, Reminder } from './types';
 
 // Simple in-memory storage with localStorage persistence
 class Store {
   private applications: Application[] = [];
   private interviews: Interview[] = [];
+  private reminders: Reminder[] = [];
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -14,6 +15,7 @@ class Store {
   private loadFromStorage() {
     const appsData = localStorage.getItem('applications');
     const interviewsData = localStorage.getItem('interviews');
+    const remindersData = localStorage.getItem('reminders');
     
     if (appsData) {
       this.applications = JSON.parse(appsData);
@@ -21,12 +23,16 @@ class Store {
     if (interviewsData) {
       this.interviews = JSON.parse(interviewsData);
     }
+    if (remindersData) {
+      this.reminders = JSON.parse(remindersData);
+    }
   }
 
   private saveToStorage() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('applications', JSON.stringify(this.applications));
       localStorage.setItem('interviews', JSON.stringify(this.interviews));
+      localStorage.setItem('reminders', JSON.stringify(this.reminders));
     }
   }
 
@@ -113,6 +119,39 @@ class Store {
 
   getAllInterviews(): Interview[] {
     return [...this.interviews];
+  }
+
+  // Reminder methods
+  getAllReminders(): Reminder[] {
+    return [...this.reminders];
+  }
+
+  getReminderById(id: string): Reminder | undefined {
+    return this.reminders.find(reminder => reminder.id === id);
+  }
+
+  addReminder(reminder: Reminder): Reminder {
+    this.reminders.push(reminder);
+    this.saveToStorage();
+    return reminder;
+  }
+
+  updateReminder(id: string, updates: Partial<Reminder>): Reminder | null {
+    const index = this.reminders.findIndex(reminder => reminder.id === id);
+    if (index === -1) return null;
+    
+    this.reminders[index] = { ...this.reminders[index], ...updates };
+    this.saveToStorage();
+    return this.reminders[index];
+  }
+
+  deleteReminder(id: string): boolean {
+    const index = this.reminders.findIndex(reminder => reminder.id === id);
+    if (index === -1) return false;
+    
+    this.reminders.splice(index, 1);
+    this.saveToStorage();
+    return true;
   }
 }
 
