@@ -1,36 +1,57 @@
 export type ApplicationStatus = 
-  | 'Wishlist'
-  | 'Applied'
-  | 'Online Assessment'
-  | 'Interview'
-  | 'Offer'
-  | 'Accepted'
-  | 'Rejected'
-  | 'Withdrawn';
+  | 'applied'
+  | 'screening'
+  | 'interview'
+  | 'offer'
+  | 'rejected'
+  | 'accepted';
 
-export type JobType = 'Full-time' | 'Internship' | 'Part-time' | 'Contract';
+export type JobType = 'full-time' | 'part-time' | 'internship' | 'contract';
+
+export type InterviewType = 'phone' | 'video' | 'onsite' | 'technical' | 'behavioral' | 'final';
+export type InterviewStatus = 'scheduled' | 'completed' | 'cancelled';
+
+export type ReminderPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 export interface Application {
   id: string;
-  companyName: string;
-  jobRole: string;
+  company: string;
+  position: string;
   jobType: JobType;
   location: string;
-  applicationDate: string;
+  appliedDate: string;
   status: ApplicationStatus;
   jobUrl?: string;
   salary?: string;
   notes?: string;
-  deadline?: string;
-  followUpDate?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Interview {
   id: string;
-  applicationId: string;
-  type: string;
+  company: string;
+  position: string;
+  type: InterviewType;
   date: string;
+  time: string;
+  duration: number;
+  location?: string;
   interviewer?: string;
   notes?: string;
-  outcome?: string;
+  status: InterviewStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Reminder {
+  id: string;
+  title: string;
+  description?: string;
+  dueDate: string;
+  priority: ReminderPriority;
+  relatedTo?: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
