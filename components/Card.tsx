@@ -17,9 +17,9 @@ export default function Card({ children, className = '', hover = false, padding 
 
   return (
     <div
-      className={`bg-white rounded-lg shadow-sm border border-gray-100 ${paddingClasses[padding]} ${
-        hover ? 'transition-all hover:shadow-md hover:border-gray-200' : ''
-      } ${className}`}
+      className={`bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-200 dark:border-gray-800 ${paddingClasses[padding]} ${
+        hover ? 'card-hover hover:shadow-2xl hover:border-blue-300 dark:hover:border-blue-700' : 'transition-shadow duration-300'
+      } animate-slide-in-up ${className}`}
     >
       {children}
     </div>
